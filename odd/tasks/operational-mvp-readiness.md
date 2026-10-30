@@ -1,0 +1,46 @@
+# Operational MVP readiness
+
+Objective: make MARAL OS usable for the core commercial flow using the supplied requirements, without inventing unresolved business rules.
+Branch: feature/operational-mvp-readiness (pre-existing unrelated working-tree changes must remain untouched)
+Delivery strategy: ask-on-risk
+Test runner: backend `npm run build`; frontend `npm run build`; focused checks as applicable
+
+## Specs
+1. **S1 — Prioritize the supplied requirements.** The application must first support the daily flow: client → quotation → order → payment/credit → preparation → dispatch.
+2. **S2 — Apply confirmed operational policies.** Person letters are J=John, I=Ivan, W=Wilson, C=Janneth; category letters are F=Cliente final, D=Distribuidor, I=Importador; quotations are always generated without IVA; John, Ivan, Wilson, and Janneth have full access; all users may confirm payments; partial dispatches may ship available quantities; official company data is confirmed.
+3. **S3 — Preserve operational correctness.** A payment receipt must not equal confirmed payment; estimated availability must not be represented as a confirmed delivery date; delivery data must not overwrite the master client address.
+4. **S4 — Validate before claiming readiness.** The critical flow must be checked with repository evidence and applicable builds/tests; unresolved blockers must be reported.
+5. **S5 — Apply confirmed discount policy.** "1 Cliente final 5% DCTO / 2 Cliente Distribuidor 26% DCTO / 3 Cliente Importador 31% DCTO (Es inportante que estos porcentajes se puedan modificar cuando sea necesario)". The defaults must be 5%, 26%, and 31%, and the values must remain editable through the existing configuration surface.
+6. **S6 — Support quotation line capacity.** "la cotización tenga mínimo 10 filas por si el cliente pide varias referencias, (o si se puede más filas mejor ej 15, Lo importante es que la impresión no supere el tamaño oficio)". The quotation editor and printed output must support at least 10 product rows, preferably 15, without exceeding oficio paper size.
+
+## Tasks
+- T1 (S1-S4): reconcile requirements, code, and documentation — inline — done — evidence in prior commits
+- T2 (S1,S3-S4): validate quotation-to-dispatch flow — inline — pending — no commit yet
+- T3 (S2-S3): implement only confirmed non-blocking corrections — inline — done — commits 75a2419, b470e56, 10c4ff3, 6bd6273
+- T4 (S1-S4): verify MVP and record remaining owner decisions — inline — blocked pending production/security verification — no commit yet
+- T5 (S5): apply owner-confirmed editable discount defaults — inline — done — commit c8d94fa
+- T6 (S2,S6): implement confirmed quotation policy and 10–15 row print-safe layout — inline — done — commit 4c2cc01
+- T7 (S1,S4): create formal Prisma migration for the current schema — inline — blocked — requires authorized disposable database baseline; no migration generated
+- T8 (S3,S4): harden uploads, JWT transport, CORS, and input validation — delegated — done — commit f3fa39d; independent verification passed after WhatsApp correction
+- T9 (S1,S3,S4): enforce payment authorization and dispatch quantity/state invariants — delegated — correction applied after verifier findings; pending final independent verification; commit f3fa39d plus uncommitted correction
+- T10 (S1,S4): document and verify backup/restore procedure — inline — pending — no commit yet
+- T11 (S1,S4): execute browser/mobile smoke tests for client → quotation → order → dispatch — delegated — pending — no commit yet
+- T12 (S4): prepare production deployment checklist and unresolved blocker report — inline — pending — no commit yet
+
+## Log
+L1: "Vamos avanzando en todo lo que podamos mientras el dueño contesta"
+- Existing working-tree changes were detected in `.claude/settings.json`, `.claude/settings.json.bak-superpowers-20261005-215310`, and `.codegraph/`; they are outside this work and must not be modified.
+- Current evidence confirms existing support for item disposition, order status auditing, order photos, shipment endpoints, credit invoice creation, and expense receipt upload. Documentation is stale in several areas.
+- T3 correction: `frontend/src/pages/Orders.tsx` now aligns the loading skeleton with seven Kanban statuses and wraps both order tables in horizontal-scroll containers for narrow screens. `frontend && npm run typecheck` passed via independent verification.
+- Backend audit identified unverified payment authorization, shipment quantity bounds, state transition invariants, and upload validation.
+- Production audit identified migration drift from `db:push`, absent backup/restore evidence, public uploads, JWT query-string exposure, and permissive CORS as release blockers or high risks.
+- Frontend audit identified a seven-column skeleton mismatch (fixed) and missing narrow-screen table overflow handling (fixed). Dispatch-partial workflow is now confirmed: allow dispatching available quantities.
+- Owner confirmations received: quotation without IVA; all four named users have full access; all users may confirm payments; person/category letters established; quotation output must support at least 10 rows, preferably 15, within oficio size.
+- `find-skills` installed from `vercel-labs/skills@find-skills` at `.agents/skills/find-skills`; source security assessment reported Safe/0 Socket alerts/Medium Snyk risk. Review before use remains required.
+- Pending work was expanded into T6-T12 so the quotation requirements, production blockers, security hardening, operational recovery, and browser verification are tracked explicitly.
+- T6 implementation commit `4c2cc01`: new and updated quotations force tax to zero; historical tax remains readable/printable; editor and quick quote remove IVA controls/copy; HTML print uses oficio and avoids row breaks. Seller-letter mapping remains unresolved because no explicit identity mapping exists.
+- T7 audit: only one committed migration exists while the current schema includes additional `db:push` changes. Generating a trustworthy migration requires an authorized disposable local database baseline; production migration status remains unknown.
+- T8 audit: confirmed JWT query-string authentication, wildcard CORS fallback with credentials, public static uploads, and weak client-declared MIME/extension validation. Security implementation preserved authenticated PDF/image consumers and used explicit allowlists.
+- T9 audit: payment amount was conflated with full invoice confirmation; legacy status dispatch bypassed shipment invariants; shipment validation was vulnerable to concurrent overshipment; shipment PATCH/DELETE lacked parent ownership checks and state reconciliation.
+- T8/T9 implementation commit `f3fa39d`: private media now uses bearer/blob access, WhatsApp documents are forced to safe attachment downloads with allowlisted MIME and nosniff, and payment/shipment safeguards are enforced. T8 independent verification passed; browser/runtime HTTP checks, file signatures, malware scanning, and production CORS configuration remain advisories/pending.
+- T9 correction is currently uncommitted pending final verification: direct DESPACHADO/ENTREGADO updates are rejected, shipment transactions serialize parent order locking, terminal states are protected, and underpayments are rejected exactly.

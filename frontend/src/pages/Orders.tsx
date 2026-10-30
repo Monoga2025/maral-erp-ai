@@ -1,0 +1,368 @@
+import { useState, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import {
+  Plus, LayoutGrid, List, Clock, Package, Truck, CheckCircle2,
+  Eye, ChevronRight,
+} from 'lucide-react'
+import { ordersApi } from '../lib/api'
+import { formatCOP, formatDate, getDaysAgo, getStatusColor } from '../lib/utils'
+import type { Order, OrderStatus } from '../types'
+import { toast } from 'sonner'
+import { TourButton } from '../components/tour/TourButton'
+import { Hint } from '../components/ui/Hint'
+
+const STATUSES: { key: OrderStatus; label: string; icon: React.ReactNode; color: string; dropColor: string }[] = [
+  { key: 'CONFIRMADO',      label: 'Confirmado',       icon: <Clock size={14} />,        color: 'border-blue-400 bg-blue-50',    dropColor: 'bg-blue-100' },
+  { key: 'EN_PRODUCCION',   label: 'En Producción',    icon: <Package size={14} />,      color: 'border-orange-400 bg-orange-50', dropColor: 'bg-orange-100' },
+  { key: 'LISTO',           label: 'Listo',            icon: <CheckCircle2 size={14} />, color: 'border-teal-400 bg-teal-50',    dropColor: 'bg-teal-100' },
+  { key: 'EMPACADO',        label: 'Empacado',         icon: <Package size={14} />,      color: 'border-purple-400 bg-purple-50', dropColor: 'bg-purple-100' },
+  { key: 'DESPACHO_PARCIAL', label: 'Desp. Parcial',  icon: <Truck size={14} />,        color: 'border-yellow-400 bg-yellow-50', dropColor: 'bg-yellow-100' },
+  { key: 'DESPACHADO',      label: 'Despachado',       icon: <Truck size={14} />,        color: 'border-indigo-400 bg-indigo-50', dropColor: 'bg-indigo-100' },
+  { key: 'ENTREGADO',       label: 'Entregado',        icon: <CheckCircle2 size={14} />, color: 'border-green-400 bg-green-50',  dropColor: 'bg-green-100' },
+]
+
+const nextStatus: Record<string, OrderStatus> = {
+  CONFIRMADO: 'EN_PRODUCCION',
+  EN_PRODUCCION: 'LISTO',
+  LISTO: 'EMPACADO',
+}
+
+export default function Orders() {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const [view, setView] = useState<'kanban' | 'table'>('kanban')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [dragOverCol, setDragOverCol] = useState<OrderStatus | null>(null)
+  const [hiddenDelivered, setHiddenDelivered] = useState<Set<string>>(new Set())
+  const [deliveredOpen, setDeliveredOpen] = useState(false)
+  const draggedId = useRef<string | null>(null)
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingNavId = useRef<string | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['orders', search, statusFilter],
+    queryFn: () => ordersApi.getAll({ search: search || undefined, status: statusFilter || undefined, pageSize: 100 }),
+  })
+
+  const { data: deliveredData } = useQuery({
+    queryKey: ['orders-delivered'],
+    queryFn: () => ordersApi.getAll({ status: 'ENTREGADO', pageSize: 50 }),
+    staleTime: 60_000,
+  })
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      ordersApi.updateStatus(id, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      toast.success('Estado actualizado')
+    },
+    onError: () => toast.error('Error al actualizar estado'),
+  })
+
+  const orders: Order[] = data?.data.data ?? []
+  const byStatus = (status: OrderStatus) => orders.filter((o) => o.status === status)
+
+  // ── Drag handlers ─────────────────────────────────────────
+  const onDragStart = (e: React.DragEvent, orderId: string) => {
+    const order = orders.find((item) => item.id === orderId)
+    if (!order || order.status === 'ENTREGADO' || order.status === 'CANCELADO') {
+      e.preventDefault()
+      return
+    }
+    draggedId.current = orderId
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const onDragOver = (e: React.DragEvent, col: OrderStatus) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverCol(col)
+  }
+
+  const onDrop = (e: React.DragEvent, col: OrderStatus) => {
+    e.preventDefault()
+    setDragOverCol(null)
+    if (!draggedId.current) return
+    const order = orders.find((o) => o.id === draggedId.current)
+    if (!order || order.status === col) return
+    if (order.status === 'DESPACHO_PARCIAL' || order.status === 'DESPACHADO') {
+      toast.info('Los pedidos despachados no pueden volver a estados previos')
+      draggedId.current = null
+      return
+    }
+    if (col === 'DESPACHO_PARCIAL' || col === 'DESPACHADO' || col === 'ENTREGADO') {
+      toast.info('Registre el despacho desde el detalle del pedido para validar cantidades y entrega')
+      navigate(`/pedidos/${order.id}`)
+      draggedId.current = null
+      return
+    }
+    updateStatus.mutate({ id: draggedId.current, status: col })
+    draggedId.current = null
+  }
+
+  const onDragLeave = () => setDragOverCol(null)
+  const onDragEnd = () => { draggedId.current = null; setDragOverCol(null) }
+
+  if (isLoading && !data) {
+    return (
+      <div className="animate-pulse space-y-4">
+        <div className="h-8 bg-gray-200 rounded w-48" />
+        <div className="grid grid-cols-7 gap-4">
+          {[...Array(7)].map((_, i) => <div key={i} className="h-64 bg-gray-200 rounded-xl" />)}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{orders.filter(o => o.status !== 'CANCELADO').length} pedidos activos</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <TourButton tourId="pedidos" />
+          <div data-tour="view-toggle" className="flex items-center bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setView('kanban')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${view === 'kanban' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              onClick={() => setView('table')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${view === 'table' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <List size={16} />
+            </button>
+          </div>
+          <button
+            data-tour="new-order-btn"
+            onClick={() => navigate('/pedidos/nuevo')}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+          >
+            <Plus size={16} />
+            Nuevo Pedido
+          </button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="Buscar por cliente, número..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full max-w-sm border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      {/* KANBAN VIEW */}
+      {view === 'kanban' && (
+        <div data-tour="kanban-board" className="grid grid-cols-7 gap-4 overflow-x-auto">
+          {STATUSES.map(({ key, label, color, dropColor }) => {
+            const col = byStatus(key)
+            const isOver = dragOverCol === key
+            return (
+              <div
+                key={key}
+                data-tour={key === 'CONFIRMADO' ? 'kanban-col-confirmado' : undefined}
+                className="min-w-[220px]"
+                onDragOver={(e) => onDragOver(e, key)}
+                onDrop={(e) => onDrop(e, key)}
+                onDragLeave={onDragLeave}
+              >
+                <div className={`flex items-center justify-between px-3 py-2 rounded-t-xl border-t-4 ${color}`}>
+                  <span className="font-semibold text-sm text-gray-700">{label}</span>
+                  <span className="bg-white text-gray-700 text-xs font-bold rounded-full px-2 py-0.5 shadow-sm">
+                    {col.length}
+                  </span>
+                </div>
+                <div className={`rounded-b-xl p-2 space-y-2 min-h-[400px] transition-colors ${isOver ? dropColor : 'bg-gray-100'}`}>
+                  {col.filter((o) => key !== 'ENTREGADO' || !hiddenDelivered.has(o.id)).map((order) => (
+                    <div
+                      key={order.id}
+                      draggable={!['DESPACHO_PARCIAL', 'DESPACHADO', 'ENTREGADO', 'CANCELADO'].includes(order.status)}
+                      onDragStart={(e) => onDragStart(e, order.id)}
+                      onDragEnd={onDragEnd}
+                      onClick={() => {
+                        if (key === 'ENTREGADO') {
+                          if (clickTimer.current && pendingNavId.current === order.id) {
+                            clearTimeout(clickTimer.current)
+                            clickTimer.current = null
+                            setHiddenDelivered((prev) => { const s = new Set(prev); s.add(order.id); return s })
+                            setDeliveredOpen(true)
+                          } else {
+                            pendingNavId.current = order.id
+                            clickTimer.current = setTimeout(() => {
+                              clickTimer.current = null
+                              navigate(`/pedidos/${pendingNavId.current!}`)
+                            }, 280)
+                          }
+                        } else {
+                          navigate(`/pedidos/${order.id}`)
+                        }
+                      }}
+                      title={key === 'ENTREGADO' ? 'Clic: abrir | Doble clic: mover a lista de entregados' : undefined}
+                      className="bg-white rounded-lg p-3 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all border border-gray-100 select-none"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <span className="text-xs font-bold text-blue-600">#{order.number}</span>
+                        <span className="text-xs text-gray-400">{getDaysAgo(order.createdAt)}d</span>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-900 truncate">
+                        {order.client?.name ?? order.client?.company ?? '—'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{(order as any)._count?.items ?? order.items?.length ?? 0} items</p>
+                      <p className="text-sm font-bold text-gray-900 mt-2">{formatCOP(order.total)}</p>
+                      {(nextStatus[key] || key === 'EMPACADO' || key === 'DESPACHO_PARCIAL') && (
+                        <div className="mt-2 flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const destination = nextStatus[key]
+                              if (!destination || destination === 'DESPACHADO' || destination === 'ENTREGADO') {
+                                toast.info('Registre el despacho desde el detalle del pedido para validar cantidades y entrega')
+                                navigate(`/pedidos/${order.id}`)
+                                return
+                              }
+                              updateStatus.mutate({ id: order.id, status: destination })
+                            }}
+                            className="flex-1 text-xs text-blue-600 hover:text-blue-800 flex items-center justify-center gap-1 border border-blue-200 rounded py-1 hover:bg-blue-50 transition-colors"
+                          >
+                            {nextStatus[key] ? 'Avanzar' : 'Registrar despacho'} <ChevronRight size={12} />
+                          </button>
+                          <Hint
+                            text={nextStatus[key] ? `Mueve este pedido al siguiente estado: ${nextStatus[key].replace('_', ' ')}` : 'Abre el detalle para registrar cantidades del despacho'}
+                            side="top"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {col.length === 0 && (
+                    <div className={`text-center py-8 text-xs transition-colors ${isOver ? 'text-gray-600 font-medium' : 'text-gray-400'}`}>
+                      {isOver ? 'Suelta aquí' : 'Sin pedidos'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* DELIVERED SECTION — below kanban */}
+      {(() => {
+        const delivered: Order[] = deliveredData?.data.data ?? []
+        const count = delivered.length
+        if (count === 0) return null
+        return (
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setDeliveredOpen(!deliveredOpen)}
+              className="flex w-full items-center justify-between px-4 py-3 bg-green-50 hover:bg-green-100 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm font-semibold text-green-800">
+                <CheckCircle2 size={16} />
+                Pedidos Entregados
+                <span className="text-xs bg-green-200 text-green-800 rounded-full px-2 py-0.5 font-bold">{count}</span>
+              </div>
+              <ChevronRight size={16} className={`text-green-600 transition-transform ${deliveredOpen ? 'rotate-90' : ''}`} />
+            </button>
+            {deliveredOpen && (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-sm bg-white">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    {['#', 'Cliente', 'Ciudad', 'Transportadora', 'Fecha', 'Total'].map((h) => (
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {delivered.map((o) => (
+                    <tr
+                      key={o.id}
+                      onClick={() => navigate(`/pedidos/${o.id}`)}
+                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-2.5 font-bold text-blue-600">#{o.number}</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{o.client?.name ?? o.client?.company ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{o.city ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{o.carrier ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-400">{formatDate(o.createdAt)}</td>
+                      <td className="px-4 py-2.5 font-semibold text-gray-900">{formatCOP(o.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* TABLE VIEW */}
+      {view === 'table' && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['#', 'Cliente', 'Tipo', 'Estado', 'Transportadora', 'Total', 'Fecha', ''].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {orders.map((order) => (
+                <tr
+                  key={order.id}
+                  className="hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/pedidos/${order.id}`)}
+                >
+                  <td className="px-4 py-3 font-bold text-blue-600">#{order.number}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {order.client?.name ?? order.client?.company ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 capitalize">{order.type ?? 'Pedido'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                      {order.status.replace('_', ' ')}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{order.carrier ?? '—'}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-900">{formatCOP(order.total)}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDate(order.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-blue-500 hover:bg-blue-50 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/pedidos/${order.id}`) }}
+                      title="Ver detalle"
+                    >
+                      <Eye size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            </table>
+          </div>
+          {orders.length === 0 && (
+            <div className="py-16 text-center text-gray-400">
+              <Package size={40} className="mx-auto mb-2 opacity-40" />
+              <p>No hay pedidos</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
