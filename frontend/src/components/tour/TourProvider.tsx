@@ -18,7 +18,7 @@ interface TourContextValue {
 const TourContext = createContext<TourContextValue | null>(null)
 
 const STORAGE_PREFIX = 'maral-tour-done-'
-const WELCOME_KEY = process.env.WELCOME_KEY ?? ''
+const WELCOME_KEY = 'maral-welcome-seen'
 
 export function TourProvider({ children }: { children: React.ReactNode }) {
   const [activeTour, setActiveTour] = useState<Tour | null>(null)

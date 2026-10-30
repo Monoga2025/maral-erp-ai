@@ -10,7 +10,7 @@ export interface QueuedRequest {
   description: string
 }
 
-const STORAGE_KEY = process.env.STORAGE_KEY ?? ''
+const STORAGE_KEY = 'maral_offline_queue_v1'
 
 export function getQueuedRequests(): QueuedRequest[] {
   try {
