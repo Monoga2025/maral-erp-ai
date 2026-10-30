@@ -120,6 +120,7 @@ Tests: `backend/src/lib/quotationPolicy.test.ts`, `backend/src/lib/startupPolicy
 
 ## Status
 
+- **Consolidated repository.** This repo consolidates the former private `maral-os` project. Its full development history lives in that private, archived repository and is intentionally not imported here, because it contains secrets and personal data. This tree is the sanitized, current state of the work (it already includes the latest operational-readiness changes).
 - **In active development.** The `docs/` and `odd/` folders hold the sprint, handoff and decision history.
 - **Schema management:** the repository contains a single Prisma migration. Development uses `prisma db push`, and the `db:push` script passes `--accept-data-loss`. Do not run it against data you care about. A full migration baseline is not in place yet.
 - **Known issue, client-side AI key:** `frontend/src/components/ChatBot.tsx` reads `VITE_GEMINI_API_KEY` at build time and sends it in the request URL from the browser. Anything in `VITE_*` ends up in the public bundle. Move that call behind the backend before exposing the app publicly.
