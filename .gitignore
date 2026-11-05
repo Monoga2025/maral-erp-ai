@@ -38,6 +38,7 @@ Thumbs.db
 # AI tool state and worktrees (local only)
 .claude/
 .agents/
+agent/
 .antigravity/
 .gemini/
 .atl/
