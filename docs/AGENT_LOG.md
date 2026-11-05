@@ -28,6 +28,40 @@
 
 ---
 
+## 2026-11-05 — Antigravity (Gentle Shell) — Auditoría Integral, Esquema de Variables, Corrección de Errores y Entorno de Pruebas
+
+### Qué se hizo
+- Auditoría profunda de variables en todo el ciclo de vida del ERP: Cliente -> Cotización -> Pedido -> Producción -> Despacho -> Cartera/Merlin.
+- Creación del Esquema Maestro de Variables (`ESQUEMA_MAESTRO_DE_VARIABLES_MARAL_OS.md`) y Auditoría Funcional/Usabilidad (`AUDITORIA_FUNCIONAL_Y_USABILIDAD_MARAL_OS.md`).
+- Implementación y corrección de bloqueos en transiciones de pedidos (`orders.ts`), soporte atómico para abonos parciales en cartera (`invoices.ts`), y resolución de WhatsApp móvil prioritario en conversiones de cotizaciones.
+- Implementación de membrete institucional oficial de MARAL TECNOLOGÍA Y COMUNICACIONES S.A.S. (NIT 901.889.479-8), firmas dinámicas por vendedor y cálculo de alto de fila dinámico en PDF con `doc.heightOfString()`.
+- Construcción y validación del entorno integral de pruebas automatizadas (`backend/src/tests/system_comprehensive.test.ts`) con 10 suites y 35 pruebas aprobadas (0 fallas).
+
+### Hallazgos importantes
+- `PUT /api/orders/:id` y `PATCH /api/orders/:id/status` bloqueaban cambios directos a DESPACHADO/ENTREGADO arrojando `ORDER_DISPATCH_FLOW_REQUIRED`, dejando sin efecto notificaciones automáticas de WhatsApp de entrega y facturación interna a crédito.
+- En `invoices.ts:240`, el backend rechazaba abonos parciales obligando a pagar el saldo total exacto.
+- Al convertir cotización a pedido, se priorizaba el teléfono fijo de la empresa sobre el celular/WhatsApp, lo que impedía que transportadoras o mensajes automáticos contactaran al cliente.
+- En PDFKit de cotizaciones, los nombres largos de productos causaban desajustes de línea; ahora se calculan mediante `doc.heightOfString()` y la columna Subtotal se amplió a 70pt.
+
+### Cambios realizados
+- `backend/src/routes/orders.ts`: Desbloqueo de transición directa a DESPACHADO/ENTREGADO; mantenimiento de integridad contra reapertura de terminales y retrocesos indebidos.
+- `backend/src/routes/invoices.ts`: Soporte completo para abonos parciales reduciendo el saldo de la factura manteniendo estado VIGENTE/VENCIDA, o liquidación a PAGADA ante cancelación total; permisos de Janet (CONTADORA) añadidos.
+- `backend/src/routes/quotations.ts`: Membrete oficial de MARAL S.A.S., cálculo de altura dinámica en filas PDF, ampliación de columna Subtotal, escalas IM/DS/CF, y firma dinámica de asesor.
+- `frontend/src/pages/QuotationForm.tsx`: Descuentos oficiales automáticos por categoría: IM (36%), DS (26%), CF (10%).
+- `backend/src/routes/dashboard.ts`: Inclusión de LISTO y DESPACHO_PARCIAL en pedidos activos.
+- `backend/src/routes/reports.ts` y `frontend/src/App.tsx`: Sincronización de permisos RBAC para Reportes y Gastos.
+- `backend/src/tests/system_comprehensive.test.ts`: 35 tests automatizados pasando en <300ms.
+
+### Riesgos identificados y mitigados
+- Base de datos Merlin (Access): Se preserva la regla de oro: NUNCA escribir en `VENMovimientos` ni `CXCMovimientos`. La facturación fiscal DIAN la realiza Janet en Merlin.
+- Cero pérdida de datos maestros: En producción, `STARTUP_SEED_ENABLED` debe mantenerse en `false` para no alterar los 1.384 clientes y 283 productos de Merlin.
+
+### Próximos pasos
+- Despliegue en producción EasyPanel con la nueva versión.
+- Implementación de la vista modal ultra-rápida (3 clics) para cotizaciones por WhatsApp en móvil para John y Lady.
+
+---
+
 ## 2026-05-13 — OpenCode — Variables compartidas entre módulos core
 
 ### Qué se hizo

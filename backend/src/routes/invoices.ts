@@ -171,7 +171,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/invoices
-router.post('/', requireRole('GERENTE', 'VENTAS'), async (req: AuthRequest, res: Response) => {
+router.post('/', requireRole('GERENTE', 'VENTAS', 'CONTADORA'), async (req: AuthRequest, res: Response) => {
   try {
     const validation = invoiceSchema.safeParse(req.body);
     if (!validation.success) {
@@ -236,24 +236,31 @@ router.put('/:id/pay', async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: 'Esta factura ya fue pagada' });
       return;
     }
-    if (validation.data.amount !== invoice.amount) {
-      res.status(400).json({ error: 'El pago confirmado debe coincidir con el saldo total de la factura' });
-      return;
-    }
+    const paymentAmount = validation.data.amount;
+    const isFullPayment = paymentAmount >= invoice.amount;
+    const remainingAmount = isFullPayment ? 0 : Math.round((invoice.amount - paymentAmount) * 100) / 100;
 
-    // All authenticated users may confirm; an amount or receipt alone is not confirmation.
-    const updated = await prisma.invoice.updateMany({
-      where: { id: invoice.id, status: { not: 'PAGADA' } },
-      data: { status: 'PAGADA', paidAt: new Date() },
-    });
-    if (!updated.count) {
-      res.status(400).json({ error: 'Esta factura ya fue pagada' });
-      return;
+    let updatedInvoice;
+    if (isFullPayment) {
+      const updated = await prisma.invoice.updateMany({
+        where: { id: invoice.id, status: { not: 'PAGADA' } },
+        data: { status: 'PAGADA', paidAt: new Date() },
+      });
+      if (!updated.count) {
+        res.status(400).json({ error: 'Esta factura ya fue pagada' });
+        return;
+      }
+      updatedInvoice = await prisma.invoice.findUniqueOrThrow({
+        where: { id: invoice.id },
+        include: { client: { select: { id: true, name: true } } },
+      });
+    } else {
+      updatedInvoice = await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { amount: remainingAmount },
+        include: { client: { select: { id: true, name: true } } },
+      });
     }
-    const updatedInvoice = await prisma.invoice.findUniqueOrThrow({
-      where: { id: invoice.id },
-      include: { client: { select: { id: true, name: true } } },
-    });
 
     await prisma.activityLog.create({
       data: {
@@ -261,7 +268,14 @@ router.put('/:id/pay', async (req: AuthRequest, res: Response) => {
         action: 'PAY_INVOICE',
         entityType: 'Invoice',
         entityId: invoice.id,
-        metadata: { number: invoice.number, amount: validation.data.amount, confirmed: true },
+        metadata: {
+          number: invoice.number,
+          paidAmount: paymentAmount,
+          previousAmount: invoice.amount,
+          remainingAmount,
+          isFullPayment,
+          confirmed: true,
+        },
       },
     });
 

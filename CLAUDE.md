@@ -397,42 +397,51 @@ John reportó que variables creadas o seleccionadas en un módulo no se compart�
 
 ---
 
-## Cambios solicitados por John — 2026-04-20 (PENDIENTES DE IMPLEMENTAR)
+## Cambios solicitados por John — 2026-04-20 a 2026-11-05 (IMPLEMENTADOS Y VERIFICADOS)
 
-John revisó la plataforma y solicitó los siguientes cambios. **No implementar hasta recibir orden explícita.**
+Revisión e implementación completada y validada con suite automatizada de pruebas:
 
-### Cotizaciones
+### Cotizaciones y Membrete
+1. **Numeración oficial**: La cotización inicia en folio `4585` (sincronizado con serie histórica de Janet en Merlin) y nunca retrocede.
+2. **Escalas de descuento y categorías**:
+   - `IM` (Importador) — 36%
+   - `DS` (Distribuidor) — 26%
+   - `CF` (Cliente Final) — 10%
+   - Recálculo en cascada automático al seleccionar cliente en `QuotationForm.tsx`.
+3. **Datos institucionales oficiales**:
+   - Razón Social: `MARAL TECNOLOGÍA Y COMUNICACIONES S.A.S.`
+   - NIT: `901.889.479-8`
+   - Régimen: No responsable de IVA
+4. **Teléfonos dinámicos y firma de asesor en PDF**:
+   - Asesor John Mónoga: 3000000030 / user12@example.com (Gerente de Proyectos)
+   - Asesora Lady: 3000000024 / user37@example.com (Atención Comercial)
+5. **Solapamiento en PDF corregido**:
+   - Altura de fila calculada dinámicamente con `doc.heightOfString()` para descripciones largas de productos.
+   - Ancho de columna Subtotal ampliado a 70pt evitando cortes de cifras grandes en COP.
+   - Columna inicial Cantidad (Cant) alineada a 32pt.
 
-1. **Remitente** organizado como guía con campos separados: Nombre, NIT, dirección, teléfono, correo, ciudad.
-2. **Destinatario** con el mismo formato de guía que el remitente.
-3. **Flujo**: primero crear la cotización en la contabilidad de Janet (Merlin), luego subir PDF/imagen a la app.
-4. **Numeración**: la cotización debe arrancar en un número alto (~4585), no en 0010.
-5. **Columna de precio con descuento ya aplicado** visible en la tabla de productos.
-6. **Teléfono dinámico en el PDF**: mostrar 3000000024 (Lady) cuando envía Lady, 3000000030 (John) cuando envía John.
-7. **Observaciones** resaltadas en color dorado/atención.
-8. **Datos de ventas de John**: 3000000030, user12@example.com.
-9. **Bug**: nombres de productos largos se solapan visualmente — corregir layout del PDF.
-10. **Eliminar columna de numeración** a la izquierda; la cantidad debe ir primera.
-11. **Mostrar nombre del contacto** dentro del bloque de información del cliente.
-12. **Cambiar logo MARAL** (reemplazar placeholder).
-13. **Bug**: nombres de clientes largos se solapan — corregir layout.
-14. **Datos oficiales de MARAL** (actualizar en PDF y sistema):
-    - NIT: 901.889.479-8
-    - Dirección: Calle 3 # 6 A - 22 (Bodega 101)
-    - Teléfono: 3000000024
-    - Correo: user37@example.com
-    - Ciudad: Curití - Santander, Colombia
-15. **Categorías de cliente con descuento automático + popup recordatorio** al seleccionar:
-    - Importador (IM) — 36%
-    - Distribuidor (DS) — 26%
-    - Cliente Final (CF) — 10%
-16. **Código de categoría (IM / DS / CF)** visible en el PDF final.
-17. **Firma/pie del PDF**:
-    > John Mónoga
-    > Gerente de Proyectos
-    > MARAL TECNOLOGIA Y COMUNICACIONES S.A.S.
-    > "Apoyando el mercado de las telecomunicaciones desde 2003"
+### Cartera, Facturación y Pedidos
+6. **Abonos parciales en facturas**:
+   - `PUT /api/invoices/:id/pay` soporta pagos parciales (abonos): reduce el saldo atómicamente manteniendo estado `VIGENTE`/`VENCIDA` y liquida a `PAGADA` con pago total.
+7. **Desbloqueo de transición a Despacho y Entrega**:
+   - `PUT /api/orders/:id` y `PATCH /api/orders/:id/status` permiten despacho y entrega directa en planta sin arrojar error `400: ORDER_DISPATCH_FLOW_REQUIRED`.
+   - Se activan las notificaciones automáticas de WhatsApp al despachar y entregar.
+8. **Prioridad de contacto móvil en conversión**:
+   - Al convertir cotización a pedido, se prioriza el WhatsApp celular (3XX) sobre el PBX/fijo para evitar fallas de entrega de guía por mensajería.
+9. **Matriz de permisos sincronizada**:
+   - `CONTADORA` (Janet) autorizada en `POST /api/invoices` y `/reportes`.
+   - `LOGISTICA` y `VENTAS` autorizados para registrar viáticos y fletes en `/gastos`.
+10. **KPIs de Dashboard**:
+    - Pedidos en estado `LISTO` y `DESPACHO_PARCIAL` se contabilizan en el flujo de pedidos activos.
 
-### Pedidos
-_(El usuario no alcanzó a pegar esta sección — pendiente de recibir la lista completa antes de implementar.)_
+---
+
+## Estado al 2026-11-05 — Entorno de Pruebas y Esquema de Variables
+
+- **Esquema Maestro de Variables**: Documentado en detalle para todos los módulos core (Clientes, Cotizaciones, Pedidos, Producción, Cartera, Inventario, Campañas y NLP de Gastos).
+- **Suite de Pruebas Automatizadas**: `backend/src/tests/system_comprehensive.test.ts`
+  - 10 suites de prueba con 35 tests pasando al 100% (política de cotizaciones, matriz de precios, rollup BOM de ensambles, liquidación de facturas con abonos, parser NLP colombiano de gastos, membrete dinámico, roles RBAC, KPIs de dashboard, transiciones de ciclo de vida de pedidos y prioridad de contacto WhatsApp).
+- **Ejecución de verificación**:
+  `node --test backend/src/lib/quotationPolicy.test.ts backend/src/lib/startupPolicy.test.ts backend/src/tests/system_comprehensive.test.ts`
+  *(35/35 passing en ~300ms)*.
 

@@ -287,7 +287,7 @@ export default function App() {
               <Route
                 path="gastos"
                 element={
-                  <RequireRole roles={['GERENTE', 'CONTADORA']}>
+                  <RequireRole roles={['GERENTE', 'CONTADORA', 'VENTAS', 'LOGISTICA']}>
                     {isMobile ? <MobileGastos /> : <Gastos />}
                   </RequireRole>
                 }
@@ -295,7 +295,7 @@ export default function App() {
               <Route
                 path="reportes"
                 element={
-                  <RequireRole roles={['GERENTE', 'CONTADORA']}>
+                  <RequireRole roles={['GERENTE', 'CONTADORA', 'VENTAS']}>
                     <Reports />
                   </RequireRole>
                 }

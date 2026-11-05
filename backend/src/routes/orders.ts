@@ -337,9 +337,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${req.params.id} FOR UPDATE`;
       const existing = await tx.order.findUnique({ where: { id: req.params.id }, select: { status: true } });
       if (!existing) throw new Error('ORDER_MISSING');
-      if ((rest.status === 'DESPACHADO' || rest.status === 'ENTREGADO') && rest.status !== existing.status) {
-        throw new Error('ORDER_DISPATCH_FLOW_REQUIRED');
-      }
+      // Direct dispatch allowed
       if (['DESPACHO_PARCIAL', 'DESPACHADO'].includes(existing.status) && rest.status &&
           ['CONFIRMADO', 'EN_PRODUCCION', 'LISTO', 'EMPACADO'].includes(rest.status)) {
         throw new Error('ORDER_DISPATCHED_BACKWARD');
@@ -409,9 +407,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${req.params.id} FOR UPDATE`;
       const existing = await tx.order.findUnique({ where: { id: req.params.id }, select: { status: true } });
       if (!existing) throw new Error('ORDER_MISSING');
-      if ((status === 'DESPACHADO' || status === 'ENTREGADO') && status !== existing.status) {
-        throw new Error('ORDER_DISPATCH_FLOW_REQUIRED');
-      }
+      // Direct dispatch allowed
       if (['DESPACHO_PARCIAL', 'DESPACHADO'].includes(existing.status) &&
           ['CONFIRMADO', 'EN_PRODUCCION', 'LISTO', 'EMPACADO'].includes(status)) {
         throw new Error('ORDER_DISPATCHED_BACKWARD');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getStartupPolicy } from './startupPolicy';
+import { getStartupPolicy } from './startupPolicy.ts';
 
 test('defaults to current startup behavior when controls are unset', () => {
   assert.deepEqual(getStartupPolicy({}), { seed: true, backgroundJobs: true });

@@ -37,7 +37,7 @@ router.get('/kpis', async (req: AuthRequest, res: Response) => {
       }),
       // Active orders (not cancelled, not delivered)
       prisma.order.count({
-        where: { status: { in: ['CONFIRMADO', 'EN_PRODUCCION', 'EMPACADO', 'DESPACHADO'] } },
+        where: { status: { in: ['CONFIRMADO', 'EN_PRODUCCION', 'LISTO', 'EMPACADO', 'DESPACHO_PARCIAL', 'DESPACHADO'] } },
       }),
       // Pending quotations (sent but not responded)
       prisma.quotation.count({
@@ -91,7 +91,7 @@ router.get('/kpis', async (req: AuthRequest, res: Response) => {
       // Count orders by status in parallel
       prisma.order.groupBy({
         by: ['status'],
-        where: { status: { in: ['CONFIRMADO', 'EN_PRODUCCION', 'EMPACADO', 'DESPACHADO', 'ENTREGADO', 'CANCELADO'] } },
+        where: { status: { in: ['CONFIRMADO', 'EN_PRODUCCION', 'LISTO', 'EMPACADO', 'DESPACHO_PARCIAL', 'DESPACHADO', 'ENTREGADO', 'CANCELADO'] } },
         _count: { status: true },
       }),
     ]);

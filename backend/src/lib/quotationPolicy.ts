@@ -17,5 +17,5 @@ export function withoutTaxPercent<T extends { taxPercent?: unknown }>(data: T): 
 }
 
 export function nextQuotationNumber(lastNumber: number | null): number {
-  return Math.max((lastNumber ?? 0) + 1, 945)
+  return Math.max((lastNumber ?? 0) + 1, 4585)
 }

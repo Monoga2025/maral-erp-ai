@@ -41,14 +41,14 @@ function fmtNIT(raw: string): string {
   return raw;
 }
 const COMPANY = {
-  name:      'INDUSTRIAS MARAL',
-  legalName: 'INDUSTRIAS MARAL / IVAN DIAZ GONZALEZ',
-  nit:       '1096.514.139',
-  nitFull:   '1.096.514.139-1',
-  address:   'Calle 3 # 6A- 22 Bodega 1',
-  city:      'Curití - Santander',
+  name:      'MARAL TECNOLOGÍA Y COMUNICACIONES S.A.S.',
+  legalName: 'MARAL TECNOLOGÍA Y COMUNICACIONES S.A.S.',
+  nit:       '901.889.479-8',
+  nitFull:   '901.889.479-8',
+  address:   'Calle 3 # 6 A - 22 (Bodega 101)',
+  city:      'Curití - Santander, Colombia',
   phone:     '3000000024',
-  email:     'user06@example.com',
+  email:     'user37@example.com',
   website:   'www.industriasmaral.com',
 };
 
@@ -72,9 +72,9 @@ function getSellerSignature(seller: { name?: string; email?: string; title?: str
 }
 
 const CATEGORY_CODES: Record<string, string> = {
-  IMPORTADOR:    'I',
-  DISTRIBUIDOR:  'D',
-  CLIENTE_FINAL: 'F',
+  IMPORTADOR:    'IM',
+  DISTRIBUIDOR:  'DS',
+  CLIENTE_FINAL: 'CF',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -486,7 +486,7 @@ router.post('/:id/convert-to-order', async (req: AuthRequest, res: Response) => 
           recipientName: data.recipientName || quotation.client.name,
           address: data.address || quotation.shippingAddress || quotation.client.address || '',
           city: data.city || quotation.client.city || '',
-          phone: data.phone || quotation.client.phone || quotation.client.whatsapp || '',
+          phone: data.phone || quotation.client.whatsapp || quotation.client.phone || '',
           carrier: data.carrier || 'Cualquiera',
           freightPayer: data.freightPayer || 'Destinatario',
           freightPayment: data.freightPayment || 'Por definir',
@@ -1410,14 +1410,14 @@ function drawQuotationPDF(doc: PDFKit.PDFDocument, q: any): void {
   // ── TABLE ─────────────────────────────────────────────────────
   // Cols sum=512: Cant(38)+Ref(55)+Desc(162)+Und(26)+P.Unit(76)+Desc%(32)+P.c/dto(75)+Subtotal(48)
   const cols = [
-    { label: 'Cant',       x: ML,       w: 38,  align: 'right'  as const },
-    { label: 'Referencia', x: ML + 38,  w: 55,  align: 'left'   as const },
-    { label: 'Descripción',x: ML + 93,  w: 162, align: 'left'   as const },
-    { label: 'Und',        x: ML + 255, w: 26,  align: 'center' as const },
-    { label: 'P. Unit',    x: ML + 281, w: 76,  align: 'right'  as const },
-    { label: 'Desc%',      x: ML + 357, w: 32,  align: 'right'  as const },
-    { label: 'P. c/dto',   x: ML + 389, w: 75,  align: 'right'  as const },
-    { label: 'Subtotal',   x: ML + 464, w: 48,  align: 'right'  as const },
+    { label: 'Cant',       x: ML,       w: 32,  align: 'right'  as const },
+    { label: 'Referencia', x: ML + 32,  w: 55,  align: 'left'   as const },
+    { label: 'Descripción',x: ML + 87,  w: 165, align: 'left'   as const },
+    { label: 'Und',        x: ML + 252, w: 24,  align: 'center' as const },
+    { label: 'P. Unit',    x: ML + 276, w: 68,  align: 'right'  as const },
+    { label: 'Desc%',      x: ML + 344, w: 30,  align: 'right'  as const },
+    { label: 'P. c/dto',   x: ML + 374, w: 68,  align: 'right'  as const },
+    { label: 'Subtotal',   x: ML + 442, w: 70,  align: 'right'  as const },
   ];
 
   const HEADER_H   = 20;
@@ -1441,9 +1441,10 @@ function drawQuotationPDF(doc: PDFKit.PDFDocument, q: any): void {
     const finalPrice = item.unitPrice * (1 - (item.discount || 0) / 100);
 
     const descW = cols[2].w - 6;
-    const charsPerLine = Math.floor(descW / 4.0);
-    const descLines = Math.ceil(prod.name.length / charsPerLine);
-    const ROW_HEIGHT = Math.max(MIN_ROW_H, descLines * 10 + 8);
+    doc.font('Helvetica-Bold').fontSize(7.5);
+    const measuredDescH = doc.heightOfString(prod?.name || '', { width: descW });
+
+    const ROW_HEIGHT = Math.max(MIN_ROW_H, Math.ceil(measuredDescH) + 8);
 
     if (y + ROW_HEIGHT > 870) {
       doc.addPage({ size: [612, 936], margin: 0 });
@@ -1539,7 +1540,7 @@ function drawQuotationPDF(doc: PDFKit.PDFDocument, q: any): void {
      .text('AVISO IMPORTANTE / CAMBIO DE RAZON SOCIAL Y DATOS BANCARIOS', ML + 10, y + 6, { lineBreak: false });
 
   doc.fillColor('#1E3A8A').font('Helvetica').fontSize(7)
-     .text('Operamos bajo el nombre INDUSTRIAS MARAL / IVAN DIAZ GONZALEZ (NIT 1.096.514.139-1). Régimen no responsable de IVA.', ML + 10, y + 17, { width: CW - 20 })
+     .text('Operamos bajo el nombre MARAL TECNOLOGÍA Y COMUNICACIONES S.A.S. (NIT 901.889.479-8).', ML + 10, y + 17, { width: CW - 20 })
      .text('BANCOLOMBIA  ·  CTA Ahorros: <ACCOUNT_NUMBER>  ·  Titular: <ACCOUNT_HOLDER>.', ML + 10, y + 34, { width: CW - 20 });
 
   y += 58;
@@ -1575,11 +1576,16 @@ function drawQuotationPDF(doc: PDFKit.PDFDocument, q: any): void {
 
   // Bloque de firma — MARAL TECNOLOGÍA
   doc.fillColor(C.black).font('Helvetica-Bold').fontSize(10)
-     .text('MARAL TECNOLOGÍA', ML, y, { lineBreak: false });
+  const sig = getSellerSignature(q.seller);
+  doc.fillColor(C.black).font('Helvetica-Bold').fontSize(10)
+     .text(sig.name, ML, y, { lineBreak: false });
+  doc.fillColor(C.tgray).font('Helvetica').fontSize(8.5)
+     .text(`${sig.title}  ·  MARAL TECNOLOGÍA Y COMUNICACIONES S.A.S.`, ML, y + 13, { lineBreak: false })
+     .text(`Cel / WhatsApp: ${sig.phone}  ·  ${sig.email}`, ML, y + 25, { lineBreak: false });
   doc.fillColor(C.tgray).font('Helvetica').fontSize(8)
-     .text('Apoyando el mercado de las telecomunicaciones desde 2003', ML, y + 13, { lineBreak: false });
+     .text('"Apoyando el mercado de las telecomunicaciones desde 2003"', ML, y + 37, { lineBreak: false });
 
-  y += 36;
+  y += 52;
 
   // Branding strip
   doc.rect(ML, y, CW, 18).fill(C.dark);

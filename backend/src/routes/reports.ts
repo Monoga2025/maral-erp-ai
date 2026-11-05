@@ -5,7 +5,7 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authenticate);
-router.use(requireRole('GERENTE', 'VENTAS'));
+router.use(requireRole('GERENTE', 'VENTAS', 'CONTADORA'));
 
 const dateRangeSchema = z.object({
   from: z.string().optional(),

@@ -55,9 +55,9 @@ type FormValues = {
 }
 
 const CATEGORY_DISCOUNTS: Partial<Record<string, { code: string; pct: number; label: string }>> = {
-  IMPORTADOR:    { code: 'IM', pct: 31, label: 'Importador' },
+  IMPORTADOR:    { code: 'IM', pct: 36, label: 'Importador' },
   DISTRIBUIDOR:  { code: 'DS', pct: 26, label: 'Distribuidor' },
-  CLIENTE_FINAL: { code: 'CF', pct: 5, label: 'Cliente Final' },
+  CLIENTE_FINAL: { code: 'CF', pct: 10, label: 'Cliente Final' },
 }
 
 // ── Kit Component Editor Modal ────────────────────────────────
@@ -655,13 +655,22 @@ export default function QuotationForm() {
                         }
                         // Notify discount hint for categorized clients
                         const disc = getCategoryDiscount(client.category)
+                        const targetPct = disc ? disc.pct : 26;
+                        setSuggestedDiscount(targetPct);
+                        setItems((prev) =>
+                          prev.map((it) => ({
+                            ...it,
+                            discount: targetPct,
+                            subtotal: it.quantity * it.unitPrice * (1 - targetPct / 100),
+                          }))
+                        );
                         if (disc) {
-                          setSuggestedDiscount(disc.pct)
+                          // ya aplicado targetPct
                           toast(`Descuento sugerido para ${disc.label} (${disc.code}): ${disc.pct}%`, {
                             duration: 5000,
                           })
                         } else {
-                          setSuggestedDiscount(26)
+                          // ya aplicado targetPct
                         }
                       }}
                     >
