@@ -6,6 +6,7 @@ import fs from 'fs';
 import prisma from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import evolutionApi from '../lib/evolutionApi';
+import { buildTrackingUrl } from '../lib/stockEngine';
 
 const router = Router();
 router.use(authenticate);
@@ -845,7 +846,11 @@ router.get('/:id/shipments', async (req: AuthRequest, res: Response) => {
       },
       orderBy: { number: 'asc' },
     });
-    res.json(shipments);
+    const enriched = shipments.map((s) => ({
+      ...s,
+      trackingUrl: buildTrackingUrl(s.carrier || '', s.trackingNumber || ''),
+    }));
+    res.json(enriched);
   } catch (error) {
     console.error('GET shipments error:', error);
     res.status(500).json({ error: 'Error al obtener despachos' });
@@ -1001,7 +1006,8 @@ router.post('/:id/shipments', async (req: AuthRequest, res: Response) => {
       return s;
     });
 
-    res.status(201).json(shipment);
+    const trackingUrl = buildTrackingUrl(shipment.carrier || '', shipment.trackingNumber || '');
+    res.status(201).json({ ...shipment, trackingUrl });
   } catch (error) {
     if (error instanceof Error && error.message === 'SHIPMENT_ORDER_TERMINAL') {
       res.status(400).json({ error: 'No se puede despachar un pedido cancelado o ya entregado' });

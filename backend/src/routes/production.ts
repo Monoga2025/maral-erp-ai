@@ -361,4 +361,71 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/production/:id/bom-explosion
+// Desglose multinivel de materiales y costeo industrial (REA Odoo mrp)
+router.get('/:id/bom-explosion', async (req: AuthRequest, res: Response) => {
+  try {
+    const po = await prisma.productionOrder.findUnique({
+      where: { id: req.params.id },
+      include: {
+        product: true,
+      },
+    });
+
+    if (!po) {
+      res.status(404).json({ error: 'Orden de producción no encontrada' });
+      return;
+    }
+
+    const specs = po.product.specs as Record<string, unknown> | null;
+    const rawMaterials = (specs?.materials as Array<{ productId: string; qtyPerUnit: number; scrapFactor?: number }>) || [];
+
+    const matProducts = await prisma.product.findMany({
+      where: { id: { in: rawMaterials.map(m => m.productId) } },
+      select: { id: true, reference: true, name: true, stock: true, cost: true, unit: true },
+    });
+    const matMap = new Map(matProducts.map(p => [p.id, p]));
+
+    const components = rawMaterials.map(m => {
+      const p = matMap.get(m.productId);
+      const scrap = m.scrapFactor || 0;
+      const unitCost = p?.cost || 0;
+      const totalQty = (m.qtyPerUnit * po.qty) * (1 + scrap);
+      return {
+        productId: m.productId,
+        name: p?.name || 'Insumo',
+        reference: p?.reference || '—',
+        qtyPerUnit: m.qtyPerUnit,
+        scrapFactor: scrap,
+        requiredQty: totalQty,
+        stockAvailable: p?.stock || 0,
+        unitCost,
+        totalCost: Math.round(unitCost * totalQty * 100) / 100,
+        isStockSufficient: (p?.stock || 0) >= totalQty,
+      };
+    });
+
+    const laborMinutes = Number(specs?.assemblyMinutes) || 15;
+    const laborRatePerMinute = 250; // COP / minuto estándar
+    const directLaborCost = Math.round(laborMinutes * po.qty * laborRatePerMinute * 100) / 100;
+    const materialsTotalCost = components.reduce((sum, c) => sum + c.totalCost, 0);
+    const estimatedTotalUnitCost = Math.round(((materialsTotalCost + directLaborCost) / po.qty) * 100) / 100;
+
+    res.json({
+      productionOrderId: po.id,
+      productName: po.product.name,
+      reference: po.product.reference,
+      qty: po.qty,
+      components,
+      directLaborCost,
+      materialsTotalCost,
+      estimatedTotalUnitCost,
+      canManufacture: components.every(c => c.isStockSufficient),
+    });
+  } catch (error) {
+    console.error('BOM explosion error:', error);
+    res.status(500).json({ error: 'Error al generar explosión de materiales' });
+  }
+});
+
 export default router;

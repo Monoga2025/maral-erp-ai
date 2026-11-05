@@ -71,16 +71,37 @@
 
 ---
 
-## 5. Verificación y Suite de Pruebas
-Comando único para validar todas las políticas del sistema:
-```bash
-node --test backend/src/lib/quotationPolicy.test.ts backend/src/lib/startupPolicy.test.ts backend/src/tests/system_comprehensive.test.ts
-```
-*Cobertura: 10 suites, 35 tests, 100% aprobados en ~300ms.*
+## 5. Motores REA Odoo Integrados a MARAL OS (2026-11-05)
+A través de la metodología REA (Reverse Engineer Anything), se extrajeron y adaptaron 4 motores de alta fidelidad desde los módulos de Odoo Community a TypeScript nativo de ultra alto rendimiento:
+1. **Pricing & Margin Engine** (`backend/src/lib/pricingEngine.ts`):
+   - Inspirado en `sale`/`sale_margin`/`pricelist`.
+   - Control de márgenes mínimos (saludable, advertencia, crítico <15%), vigencia dinámica de cotizaciones (15 días) y generación de enlace directo para aprobación/envío por WhatsApp.
+2. **Stock & Backorders Engine** (`backend/src/lib/stockEngine.ts`):
+   - Inspirado en `stock`/`stock_warehouse_orderpoint`/`delivery`.
+   - Cálculo de stock pronosticado ($Physical - Reserved + Incoming$), disparador de órdenes de reposición y generación automática de backorders ante despachos parciales.
+   - Constructor de URLs de rastreo directo para Coordinadora, Servientrega, Envía, Inter Rapidísimo y TCC.
+3. **Telecom BOM & Electronics Assembly Engine** (`backend/src/lib/telecomBomEngine.ts`):
+   - Inspirado en `mrp`/`mrp_subcontracting`.
+   - Explosión recursiva multinivel de BOMs con merma técnica de corte de coaxial (scrap ~6%), kits virtuales (`KIT_PHANTOM`) que descuentan materias primas en despacho sin alterar stock ficticio del padre, y rollup industrial de costos con mano de obra directa.
+4. **DIAN Electronic Invoicing Engine** (`backend/src/lib/dianSigner.ts`, `backend/src/lib/dianSoap.ts`, `backend/src/lib/dianNotes.ts`):
+   - Inspirado en `l10n_co_edi`/`l10n_co_dian` (Software Propio).
+   - Generación de CUFE (facturas con Clave Técnica) y CUDE (Notas Crédito/Débito con PIN de software).
+   - Canonicalización C14N 1.0, firma digital XAdES-EPES con política DIAN v2, empaquetador nativo ZIP DEFLATE en memoria sin librerías pesadas externas y envoltura SOAP WCF (`SendBillSync` / `SendTestSetAsync`).
+   - Inmutabilidad estricta de base gravable nominal para preservar el CUFE ante abonos de cartera.
 
 ---
 
-## 6. Documentos de Referencia
+## 6. Verificación y Suite de Pruebas
+Comando unificado para validar todas las políticas y motores del sistema:
+```bash
+cmd /c npx tsx --test backend/src/tests/pricing_engine.test.ts backend/src/tests/stock_engine.test.ts backend/src/tests/telecom_bom_engine.test.ts backend/src/tests/dian_electronic_billing.test.ts backend/src/tests/system_comprehensive.test.ts
+```
+*Cobertura: 14 suites, 69 tests automatizados, 100% aprobados en ~230ms (0 fallos).*
+
+---
+
+## 7. Documentos de Referencia
+- [PLAN_MAESTRO_REA_ODOO_A_MARAL_OS.md](file:///C:/Users/Monoga/.gemini/antigravity-cli/brain/a7148626-2014-457a-a0d7-60c29cdedf21/PLAN_MAESTRO_REA_ODOO_A_MARAL_OS.md)
 - [ESQUEMA_MAESTRO_DE_VARIABLES_MARAL_OS.md](file:///C:/Users/Monoga/.gemini/antigravity-cli/brain/a7148626-2014-457a-a0d7-60c29cdedf21/ESQUEMA_MAESTRO_DE_VARIABLES_MARAL_OS.md)
 - [AUDITORIA_FUNCIONAL_Y_USABILIDAD_MARAL_OS.md](file:///C:/Users/Monoga/.gemini/antigravity-cli/brain/a7148626-2014-457a-a0d7-60c29cdedf21/AUDITORIA_FUNCIONAL_Y_USABILIDAD_MARAL_OS.md)
 - [ROADMAP_EJECUCION_MARAL_OS.md](file:///C:/Users/Monoga/.gemini/antigravity-cli/brain/a7148626-2014-457a-a0d7-60c29cdedf21/ROADMAP_EJECUCION_MARAL_OS.md)

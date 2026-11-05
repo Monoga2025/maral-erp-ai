@@ -386,7 +386,10 @@ export default function Quotations() {
       setConvertingQuotation(null)
       navigate(`/pedidos/${res.data.id}`)
     },
-    onError: () => toast.error('Error al convertir cotización'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error || 'Error al convertir cotización'
+      toast.error(msg)
+    },
   })
 
   const productionOrderMutation = useMutation({

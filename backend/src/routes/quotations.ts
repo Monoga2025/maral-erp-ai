@@ -6,6 +6,7 @@ import path from 'path';
 import prisma from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { buildQuotationItemData, calculateQuotationTotals, nextQuotationNumber } from '../lib/quotationPolicy';
+import { roundCurrency, isQuotationExpired, calculateQuoteSummary, resolveClientPricingPolicy } from '../lib/pricingEngine';
 
 const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
 
@@ -453,6 +454,17 @@ router.post('/:id/convert-to-order', async (req: AuthRequest, res: Response) => 
       return;
     }
 
+    const expiry = isQuotationExpired(quotation.createdAt, quotation.validityDays ?? 15);
+    if (expiry.isExpired && !req.body.forceConvert) {
+      res.status(400).json({
+        error: `La cotización #${quotation.number} expiró hace ${Math.abs(expiry.daysRemaining)} día(s). Solicite autorización o actualice los precios.`,
+        isExpired: true,
+        daysRemaining: expiry.daysRemaining,
+        expirationDate: expiry.expirationDate,
+      });
+      return;
+    }
+
     const orderDataSchema = z.object({
       recipientName: z.string().optional(),
       address: z.string().optional(),
@@ -494,11 +506,14 @@ router.post('/:id/convert-to-order', async (req: AuthRequest, res: Response) => 
           type: data.type,
           notes: data.notes,
           items: {
-            create: quotation.items.map((item) => ({
-              productId: item.productId,
-              qty: item.qty,
-              unitPrice: item.unitPrice * (1 - (item.discount || 0) / 100),
-            })),
+            create: quotation.items.map((item) => {
+              const effectiveUnit = roundCurrency(item.unitPrice * (1 - (item.discount || 0) / 100));
+              return {
+                productId: item.productId,
+                qty: item.qty,
+                unitPrice: effectiveUnit,
+              };
+            }),
           },
         },
         include: {
@@ -526,6 +541,125 @@ router.post('/:id/convert-to-order', async (req: AuthRequest, res: Response) => 
   } catch (error) {
     console.error('Convert to order error:', error);
     res.status(500).json({ error: 'Error al convertir cotización a pedido' });
+  }
+});
+
+// GET /api/quotations/:id/pricing-audit
+// Auditoría de rentabilidad y margen en tiempo real (REA Odoo sale/margin)
+router.get('/:id/pricing-audit', async (req: AuthRequest, res: Response) => {
+  try {
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: req.params.id },
+      include: {
+        client: true,
+        items: {
+          include: {
+            product: { select: { id: true, name: true, reference: true, cost: true, price: true } },
+          },
+        },
+      },
+    });
+
+    if (!quotation) {
+      res.status(404).json({ error: 'Cotización no encontrada' });
+      return;
+    }
+
+    const itemsInput = quotation.items.map((item) => ({
+      productId: item.productId,
+      qty: item.qty,
+      unitPrice: item.unitPrice,
+      cost: item.product?.cost || 0,
+      discount: item.discount || 0,
+    }));
+
+    const summary = calculateQuoteSummary(itemsInput, quotation.taxPercent || 0);
+    const policy = resolveClientPricingPolicy(quotation.client?.category);
+    const expiry = isQuotationExpired(quotation.createdAt, quotation.validityDays ?? 15);
+
+    res.json({
+      quotationId: quotation.id,
+      number: quotation.number,
+      client: {
+        id: quotation.client.id,
+        name: quotation.client.name,
+        category: quotation.client.category,
+      },
+      policy,
+      summary,
+      expiry,
+    });
+  } catch (error) {
+    console.error('Pricing audit error:', error);
+    res.status(500).json({ error: 'Error al auditar precios de la cotización' });
+  }
+});
+
+// GET /api/quotations/:id/whatsapp-share
+// Generador de mensaje y link de WhatsApp para cotización instantánea
+router.get('/:id/whatsapp-share', async (req: AuthRequest, res: Response) => {
+  try {
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: req.params.id },
+      include: {
+        client: true,
+        items: {
+          include: {
+            product: { select: { id: true, name: true, reference: true } },
+          },
+        },
+      },
+    });
+
+    if (!quotation) {
+      res.status(404).json({ error: 'Cotización no encontrada' });
+      return;
+    }
+
+    const fmtCOP = (n: number) =>
+      new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n);
+
+    const clientPhone = (quotation.client.whatsapp || quotation.client.phone || '').replace(/\D/g, '');
+    const cleanPhone = clientPhone.startsWith('57') ? clientPhone : clientPhone ? `57${clientPhone}` : '';
+
+    const lines = [
+      `*COTIZACIÓN MARAL #${quotation.number}*`,
+      `Cliente: *${quotation.client.company || quotation.client.name}*`,
+      `Validez: ${quotation.validityDays} días`,
+      '',
+      '*DETALLE DE PRODUCTOS:*',
+    ];
+
+    quotation.items.forEach((it, idx) => {
+      const netUnit = roundCurrency(it.unitPrice * (1 - (it.discount || 0) / 100));
+      const sub = roundCurrency(netUnit * it.qty);
+      const descText = it.discount ? ` (${it.discount}% desc)` : '';
+      lines.push(`${idx + 1}. *${it.product?.name || 'Ítem'}* (Ref: ${it.product?.reference || '—'})`);
+      lines.push(`   ${it.qty} und × ${fmtCOP(netUnit)}${descText} = ${fmtCOP(sub)}`);
+    });
+
+    lines.push('');
+    lines.push(`*TOTAL: ${fmtCOP(quotation.total)} COP*`);
+    lines.push('');
+    lines.push('Para aprobar o consultar despacho, responda a este mensaje.');
+    lines.push('Maral Tecnología y Comunicaciones S.A.S.');
+
+    const messageText = lines.join('\n');
+    const encodedText = encodeURIComponent(messageText);
+    const whatsappUrl = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
+      : `https://api.whatsapp.com/send?text=${encodedText}`;
+
+    res.json({
+      quotationNumber: quotation.number,
+      clientName: quotation.client.name,
+      phone: cleanPhone,
+      messageText,
+      whatsappUrl,
+    });
+  } catch (error) {
+    console.error('WhatsApp share error:', error);
+    res.status(500).json({ error: 'Error al generar enlace de WhatsApp' });
   }
 });
 

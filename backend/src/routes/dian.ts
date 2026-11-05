@@ -13,6 +13,8 @@ import {
   wrapInSOAPEnvelope,
   type DIANConfig,
 } from '../lib/dian';
+import { DianXadesSigner } from '../lib/dianSigner';
+import { createDianZip, buildDianFileName, buildDianSoapEnvelope } from '../lib/dianSoap';
 
 const router = Router();
 router.use(authenticate);
@@ -218,6 +220,7 @@ router.post('/invoices/:invoiceId/send', requireRole('GERENTE'), async (req: Aut
   try {
     const dianInv = await prisma.dIANInvoice.findUnique({
       where: { invoiceId: req.params.invoiceId },
+      include: { invoice: true },
     });
 
     if (!dianInv || !dianInv.ublXmlPath) {
@@ -235,26 +238,43 @@ router.post('/invoices/:invoiceId/send', requireRole('GERENTE'), async (req: Aut
       return;
     }
 
-    // TODO Fase B: firmar el XML con XAdES antes de enviar
-    // Por ahora enviamos sin firma (modo prueba local)
-    if (!config.testingMode) {
-      res.status(501).json({
-        error: 'Envío DIAN no disponible. La firma XAdES-BES (Fase B) está pendiente de implementación.',
-        phase: 'B',
+    let xml = fs.readFileSync(dianInv.ublXmlPath, 'utf8');
+
+    // Firma digital XAdES-EPES según estándar DIAN v2 / Software Propio
+    if (config.certificatePath && fs.existsSync(config.certificatePath)) {
+      try {
+        const certBuf = fs.readFileSync(config.certificatePath);
+        const signer = new DianXadesSigner(certBuf, config.certificatePassword);
+        xml = signer.signDocument(xml);
+        fs.writeFileSync(dianInv.ublXmlPath, xml, 'utf8');
+      } catch (signErr) {
+        console.error('Error firmando XML XAdES:', signErr);
+        res.status(500).json({ error: 'Error al firmar digitalmente el documento con certificado digital' });
+        return;
+      }
+    } else if (!config.testingMode) {
+      res.status(400).json({
+        error: 'Para emitir a la DIAN en producción se requiere configurar el certificado digital (.p12 / .pfx) en Configuración → DIAN.',
       });
       return;
     }
 
-    const xml = fs.readFileSync(dianInv.ublXmlPath, 'utf8');
-    const ublB64 = Buffer.from(xml, 'utf8').toString('base64');
-    const soap = wrapInSOAPEnvelope(ublB64);
+    const invoiceNum = dianInv.invoice?.number ?? 1;
+    const { fileNameXml, fileNameZip } = buildDianFileName(config.nit, invoiceNum, 'fv');
+    const zipBuffer = createDianZip(fileNameXml, xml);
+    const zipBase64 = zipBuffer.toString('base64');
+    const { soapEnvelope } = buildDianSoapEnvelope(
+      fileNameZip,
+      zipBase64,
+      config.testingMode ? (process.env.DIAN_TEST_SET_ID || undefined) : undefined
+    );
 
     await prisma.dIANInvoice.update({
       where: { invoiceId: req.params.invoiceId },
       data: { dianStatus: 'EN_PROCESO', dianSentAt: new Date() },
     });
 
-    const response = await sendToDIAN(soap, config);
+    const response = await sendToDIAN(soapEnvelope, config);
 
     const status = response.isValid ? 'ACEPTADA' : 'RECHAZADA';
     await prisma.dIANInvoice.update({

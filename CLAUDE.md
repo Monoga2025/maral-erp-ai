@@ -436,12 +436,22 @@ Revisión e implementación completada y validada con suite automatizada de prue
 
 ---
 
-## Estado al 2026-11-05 — Entorno de Pruebas y Esquema de Variables
+## Estado al 2026-11-05 — Integración REA Odoo a MARAL OS y Suites de Pruebas
 
 - **Esquema Maestro de Variables**: Documentado en detalle para todos los módulos core (Clientes, Cotizaciones, Pedidos, Producción, Cartera, Inventario, Campañas y NLP de Gastos).
-- **Suite de Pruebas Automatizadas**: `backend/src/tests/system_comprehensive.test.ts`
-  - 10 suites de prueba con 35 tests pasando al 100% (política de cotizaciones, matriz de precios, rollup BOM de ensambles, liquidación de facturas con abonos, parser NLP colombiano de gastos, membrete dinámico, roles RBAC, KPIs de dashboard, transiciones de ciclo de vida de pedidos y prioridad de contacto WhatsApp).
+- **Motores REA Odoo Implementados en TypeScript Nativo**:
+  1. `pricingEngine.ts`: Matriz de precios por categoría, márgenes ponderados, control de cotizaciones vencidas y cálculo de precios netos sin floating drift.
+  2. `stockEngine.ts`: Pronóstico de inventario ($Physical - Reserved + Incoming$), disparador de compras y órdenes de reposición, gestión de backorders y generador de tracking URLs de transportadoras.
+  3. `telecomBomEngine.ts`: Explosión multinivel de BOM, factor de merma (scrap) para cables coaxiales, kits virtuales (`KIT_PHANTOM`) y costeo industrial integrado.
+  4. `dianSigner.ts`, `dianSoap.ts`, `dianNotes.ts`: Facturación electrónica gratuita directa vía Software Propio (C14N, XAdES-EPES con política DIAN v2, ZIP DEFLATE en memoria y envoltura SOAP WCF).
+- **Rutas Operativas Conectadas**:
+  - `backend/src/routes/quotations.ts`: Control de vigencia de 15 días en conversión a pedidos, `GET /:id/pricing-audit` y `GET /:id/whatsapp-share`.
+  - `backend/src/routes/orders.ts`: Enriquecimiento automático de despachos con URL de rastreo directo (`trackingUrl`).
+  - `backend/src/routes/production.ts`: `GET /:id/bom-explosion` para análisis de viabilidad de materiales y costeo industrial.
+  - `backend/src/routes/dian.ts`: Integración completa de firma digital XAdES-EPES y empaquetado ZIP SOAP.
+- **Suites de Pruebas Automatizadas**:
+  - 14 suites con **69 tests unitarios e integrados** ejecutándose al 100% (0 fallos).
 - **Ejecución de verificación**:
-  `node --test backend/src/lib/quotationPolicy.test.ts backend/src/lib/startupPolicy.test.ts backend/src/tests/system_comprehensive.test.ts`
-  *(35/35 passing en ~300ms)*.
+  `cmd /c npx tsx --test backend/src/tests/pricing_engine.test.ts backend/src/tests/stock_engine.test.ts backend/src/tests/telecom_bom_engine.test.ts backend/src/tests/dian_electronic_billing.test.ts backend/src/tests/system_comprehensive.test.ts`
+  *(69/69 passing en ~230ms)*.
 
