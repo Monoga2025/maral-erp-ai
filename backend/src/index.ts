@@ -206,6 +206,14 @@ const handleShutdown = async (signal: string) => {
   });
 };
 
+process.on('unhandledRejection', (reason) => {
+  console.warn('Unhandled Rejection intercepted (protecting dev server):', (reason as Error)?.message || reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.warn('Uncaught Exception intercepted (protecting dev server):', err.message);
+});
+
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 

@@ -8,8 +8,12 @@ router.use(authenticate);
 
 // GET /api/notifications — polling endpoint
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const notifications = await getUnreadNotifications(req.user!.userId);
-  res.json({ data: notifications, count: notifications.length });
+  try {
+    const notifications = await getUnreadNotifications(req.user!.userId);
+    res.json({ data: notifications, count: notifications.length });
+  } catch {
+    res.json({ data: [], count: 0 });
+  }
 });
 
 // PATCH /api/notifications/read-all
